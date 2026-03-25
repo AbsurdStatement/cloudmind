@@ -1,0 +1,116 @@
+version: '3.9'
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: cloudmind-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - ./sql/init_mysql.sql:/docker-entrypoint-initdb.d/init_mysql.sql:ro
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root123}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: cloudmind-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cloudmind_vector}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ./sql/init_pgvector.sql:/docker-entrypoint-initdb.d/init_pgvector.sql:ro
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-cloudmind_vector}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2025-02-03T21-03-04Z
+    container_name: cloudmind-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # Redis 为可选组件：用于会话、缓存、热数据加速
+  redis:
+    image: redis:7.4-alpine
+    container_name: cloudmind-redis
+    restart: unless-stopped
+    profiles: ["optional"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
+  backend:
+    build:
+      context: ./backend
+    container_name: cloudmind-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cloudmind?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      CLOUDMIND_PGVECTOR_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-cloudmind_vector}
+      CLOUDMIND_PGVECTOR_USERNAME: ${POSTGRES_USER:-postgres}
+      CLOUDMIND_PGVECTOR_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      CLOUDMIND_MINIO_ENDPOINT: http://minio:9000
+      CLOUDMIND_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      CLOUDMIND_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      CLOUDMIND_AI_API_KEY: ${AI_API_KEY:-your-api-key}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: cloudmind-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+
+volumes:
+  mysql_data:
+  pg_data:
+  minio_data:
+  redis_data:
