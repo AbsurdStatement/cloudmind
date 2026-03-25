@@ -1,0 +1,65 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: cloudmind-backend
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+  datasource:
+    url: jdbc:mysql://localhost:3306/cloudmind?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    username: root
+    password: root123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+
+cloudmind:
+  jwt:
+    # 至少 32 字符，满足 HS256 密钥长度要求
+    secret: cloudmind-mvp-jwt-secret-2026-very-safe
+    expire-seconds: 86400
+
+  # 预留：MinIO 对象存储
+  minio:
+    endpoint: http://localhost:9000
+    access-key: minioadmin
+    secret-key: minioadmin
+    bucket: cloudmind-files
+
+  # PostgreSQL + pgvector（语义检索）
+  pgvector:
+    url: jdbc:postgresql://localhost:5432/cloudmind_vector
+    username: postgres
+    password: postgres123
+
+  # AI 模型网关（兼容 DeepSeek / 智谱）
+  ai:
+    provider: deepseek
+    # DeepSeek: https://api.deepseek.com  智谱(OpenAI兼容): https://open.bigmodel.cn/api/paas/v4
+    base-url: https://api.deepseek.com
+    api-key: your-api-key
+    chat-path: /v1/chat/completions
+    embedding-path: /v1/embeddings
+    deepseek-model: deepseek-chat
+    zhipu-model: glm-4-flash
+    deepseek-embedding-model: text-embedding-v3
+    zhipu-embedding-model: embedding-3
+    timeout-ms: 15000
+    retry-times: 2
+
+  parser:
+    max-size-mb: 30
+
+  vector:
+    chunk-size: 500
+    overlap: 80
+    default-top-k: 5
